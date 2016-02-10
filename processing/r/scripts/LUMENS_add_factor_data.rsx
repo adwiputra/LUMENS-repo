@@ -11,9 +11,9 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
@@ -40,3 +40,5 @@ eval(parse(text=(paste("resave(", data_name, ",", data_description_name, ",SCIEN
 
 #CLEAN ENVIRONMENT
 rm(list=ls(all.names=TRUE))
+
+gc()

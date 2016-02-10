@@ -15,9 +15,9 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-  user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-  user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
@@ -57,9 +57,11 @@ dbase_all<-NULL
 
 for(i in 1:QUESC_list_n) {
   data<-as.character(QUESC_list [i,1])
-  t1<-as.integer(substr(data, 16:19, 19))
-  t2<-as.integer(substr(data, 21:24, 24))
-  eval(parse(text=(paste("dbase<-subset(QUESC_database_", t1,"_", t2, ", select=c(LC_t1,LC_t2,Z_NAME, COUNT, em, sq))", sep=""))))
+  n_dta<-nchar(data)
+  t1<-as.integer(substr(data, (n_dta-8):(n_dta-5), (n_dta-5)))
+  t2<-as.integer(substr(data, (n_dta-3):n_dta, n_dta))
+  pu_name<-substr(data, 16:(n_dta-10), (n_dta-10))
+  eval(parse(text=(paste("dbase<-subset(QUESC_database_", pu_name, "_", t1,"_", t2, ", select=c(LC_t1,LC_t2,Z_NAME, COUNT, em, sq))", sep=""))))
   dbase$Start_year<-t1
   dbase$End_year<-t2
   dbase$nYear<-dbase$End_year-dbase$Start_year

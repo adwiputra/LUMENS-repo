@@ -9,11 +9,12 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS", sep="")
+dir.create(LUMENS_path_user, mode="0777")
 
 #MODIFY LOG FILE
 proj_descr$Description<-as.character(proj_descr$Description)

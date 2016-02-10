@@ -11,19 +11,17 @@
 
 time_start<-paste(eval(parse(text=(paste("Sys.time ()")))), sep="")
 
-library(rgdal)
-library(tiff)
-library(spatial.tools)
-library(RColorBrewer)
-library(grid)
-library(plyr)
-library(ggplot2)
 library(rtf)
 library(rasterVis)
-
+library(ggplot2)
+library(RColorBrewer)
+library(stringr)
+library(rgeos)
+library(grid)
 
 #build LUMENS project folder structure
 setwd(working_directory)
+project<-str_replace_all(string=project, pattern=" ", repl="_")
 LUMENS_path <- paste(working_directory, "/", project, sep="")
 PUR_path <- paste(LUMENS_path, "/PUR", sep="")
 QUES_path <- paste(LUMENS_path, "/QUES", sep="")
@@ -49,9 +47,9 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS", sep="")
 dir.create(LUMENS_path_user, mode="0777")
@@ -135,18 +133,34 @@ test1<-as.data.frame(admin_attribute)
 test2<-as.character(field_attribute)
 eval(parse(text=(paste("p.admin.df<-aggregate(IDADM~",test2,",data=test1,FUN=mean)", sep=""  ))))
 p.admin.df<-edit(p.admin.df)
+colnames(p.admin.df)[1]="ADMIN_UNIT"
 
-palette <- brewer.pal("Greys", n=9)
-color.background = palette[2]
+myColors1 <- brewer.pal(9,"Set1")
+myColors2 <- brewer.pal(8,"Accent")
+myColors3 <- brewer.pal(12,"Paired")
+myColors4 <- brewer.pal(9, "Pastel1")
+myColors5 <- brewer.pal(8, "Set2")
+myColors6 <- brewer.pal(8, "Dark2")
+myColors7 <- rev(brewer.pal(11, "RdYlGn"))
+myColors8 <- "#000000"
+myColors9 <- brewer.pal(12, "Set3")
 
+if (0 %in% p.admin.df$IDADM){
+  myColors  <-c(myColors8, myColors7,myColors1, myColors2, myColors3, myColors4, myColors5, myColors6)
+} else {
+  myColors  <-c(myColors7,myColors1, myColors2, myColors3, myColors4, myColors5, myColors6)
+}
+
+myColors.lu <- myColors[1:(length(unique(p.admin.df$IDADM))+1)]
+ColScale.lu<-scale_fill_manual(name=field_attribute, breaks=c(0, p.admin.df$IDADM), labels=c("NoData", as.character(p.admin.df$ADMIN_UNIT)), values=myColors.lu)
 plot3<-gplot(ref, maxpixels=100000) + geom_raster(aes(fill=as.factor(value))) +
-coord_equal() + theme(plot.title = element_text(lineheight= 5, face="bold")) +
-theme( axis.title.x=element_blank(),axis.title.y=element_blank(),
-panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
-legend.title = element_text(size=10),
-legend.text = element_text(size=10),
-legend.key.height = unit(0.35, "cm"),
-legend.key.width = unit(0.35, "cm"))+ theme(panel.background=element_rect(fill=color.background, color=color.background))
+  coord_equal() + ColScale.lu + theme(plot.title = element_text(lineheight= 5, face="bold")) +
+  theme( axis.title.x=element_blank(),axis.title.y=element_blank(),
+         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+         legend.title = element_text(size=10),
+         legend.text = element_text(size=10),
+         legend.key.height = unit(0.35, "cm"),
+         legend.key.width = unit(0.35, "cm"))
 
 setwd(LUMENS_path)
 
@@ -161,34 +175,110 @@ pu_pu1<-ref
 names(pu_pu1)<-"Administrative maps"
 
 save(LUMENS_path_user,
-landuse.index,
-proj_descr,
-ref,
-location,
-province,
-country,
-p.admin.df,
-ref.index,
-admin.index,
-cov.desc,
-pu.index,
-pu_pu1,
-pu_rec.index,
-lut_carbon.index,
-lut_landuse.index,
-lut_zone.index,
-period.index,
-PUR.index,
-PreQUES.index,
-QUESC.index,
-QUESB.index,
-QUESH.index,
-SCIENDO1.index,
-SCIENDO2.index,
-TA1.index,
-TA2.index,
-resave,
-file=proj.file)
+     landuse.index,
+     proj_descr,
+     ref,
+     location,
+     province,
+     country,
+     p.admin.df,
+     ref.index,
+     admin.index,
+     cov.desc,
+     pu.index,
+     pu_pu1,
+     pu_rec.index,
+     lut_carbon.index,
+     lut_landuse.index,
+     lut_zone.index,
+     period.index,
+     PUR.index,
+     PreQUES.index,
+     QUESC.index,
+     QUESB.index,
+     QUESH.index,
+     SCIENDO1.index,
+     SCIENDO2.index,
+     TA1.index,
+     TA2.index,
+     resave,
+     file=proj.file)
+
+#CREATE QGIS PROJECT
+qgsproject<-paste(LUMENS_path, "/", project, ".qgs", sep="")
+sink(qgsproject)
+cat("<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>")
+cat('<qgis projectname="" version="2.0.0-Taoge">')
+cat('<title></title>')
+cat('<mapcanvas>')
+cat('<units>degrees</units>')
+cat('<extent>')
+cat('<xmin>0</xmin>')
+cat('<ymin>0</ymin>')
+cat('<xmax>0</xmax>')
+cat('<ymax>0</ymax>')
+cat('</extent>')
+cat('<projections>0</projections>')
+cat('<destinationsrs>')
+cat('<spatialrefsys>')
+cat('<proj4>+proj=longlat +datum=WGS84 +no_defs</proj4>')
+cat('<srsid>3452</srsid>')
+cat('<srid>4326</srid>')
+cat('<authid>EPSG:4326</authid>')
+cat('<description>WGS 84</description>')
+cat('<projectionacronym>longlat</projectionacronym>')
+cat('<ellipsoidacronym>WGS84</ellipsoidacronym>')
+cat('<geographicflag>true</geographicflag>')
+cat('</spatialrefsys>')
+cat('</destinationsrs>')
+cat('</mapcanvas>')
+cat('<legend updateDrawingOrder="true"/>')
+cat('<mapcanvas>')
+cat('<units>degrees</units>')
+cat('<extent>')
+cat('<xmin>0</xmin>')
+cat('<ymin>0</ymin>')
+cat('<xmax>0</xmax>')
+cat('<ymax>0</ymax>')
+cat('</extent>')
+cat('<projections>0</projections>')
+cat('<destinationsrs>')
+cat('<spatialrefsys>')
+cat('<proj4>+proj=longlat +datum=WGS84 +no_defs</proj4>')
+cat('<srsid>3452</srsid>')
+cat('<srid>4326</srid>')
+cat('<authid>EPSG:4326</authid>')
+cat('<description>WGS 84</description>')
+cat('<projectionacronym>longlat</projectionacronym>')
+cat('<ellipsoidacronym>WGS84</ellipsoidacronym>')
+cat('<geographicflag>true</geographicflag>')
+cat('</spatialrefsys>')
+cat('</destinationsrs>')
+cat('</mapcanvas>')
+cat('<projectlayers layercount="0"/>')
+cat('<properties>')
+cat('<SpatialRefSys>')
+cat('<ProjectCrs type="QString">EPSG:4326</ProjectCrs>')
+cat('</SpatialRefSys>')
+cat('<Paths>')
+cat('<Absolute type="bool">false</Absolute>')
+cat('</Paths>')
+cat('<Gui>')
+cat('<SelectionColorBluePart type="int">0</SelectionColorBluePart>')
+cat('<CanvasColorGreenPart type="int">255</CanvasColorGreenPart>')
+cat('<CanvasColorRedPart type="int">255</CanvasColorRedPart>')
+cat('<SelectionColorRedPart type="int">255</SelectionColorRedPart>')
+cat('<SelectionColorAlphaPart type="int">255</SelectionColorAlphaPart>')
+cat('<SelectionColorGreenPart type="int">255</SelectionColorGreenPart>')
+cat('<CanvasColorBluePart type="int">255</CanvasColorBluePart>')
+cat('</Gui>')
+cat('<PositionPrecision>')
+cat('<DecimalPlaces type="int">2</DecimalPlaces>')
+cat('<Automatic type="bool">true</Automatic>')
+cat('</PositionPrecision>')
+cat('</properties>')
+cat('</qgis>')
+sink()
 
 #WRITE REPORT
 title1<-"{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red146\\green208\\blue80;\\red0\\green176\\blue240;\\red140\\green175\\blue71;\\red0\\green112\\blue192;\\red79\\green98\\blue40;} \\pard\\qr\\b\\fs70\\cf2 L\\cf3U\\cf4M\\cf5E\\cf6N\\cf7S \\cf1REPORT \\par\\b0\\fs20\\ql\\cf1"
@@ -276,10 +366,4 @@ shell(command)
 #CLEAN ENVIRONMENT
 rm(list=ls(all.names=TRUE))
 
-
-
-
-
-
-
-
+gc()

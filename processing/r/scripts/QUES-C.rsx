@@ -24,9 +24,9 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-  user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-  user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
@@ -36,6 +36,13 @@ load(proj.file)
 #====READ LANDUSE DATA FROM LUMENS DATABASE====
 per<-as.data.frame(ls(pattern="freq"))
 n<-nrow(per)
+if(n==0){
+  msgBox <- tkmessageBox(title = "QUES-C",
+                         message = "No Land Use/Cover found",
+                         icon = "info",
+                         type = "ok")
+  quit()
+}
 data<-per
 data.y<-NULL
 for (q in 1:n) {
@@ -58,24 +65,51 @@ for(i in 1:n) {
   }
 }
 
+#===Check LUMENS QUES-C log file====
+if (file.exists(paste(user_path,"/LUMENS/LUMENS_quesc.log", sep=""))) {
+  log.quesc<-read.table(paste(user_path,"/LUMENS/LUMENS_quesc.log", sep=""), sep=",", header=T, row.names=1)
+  print("LUMENS QUES-C log file is available")
+} else {
+  log.quesc<-data.frame(IDX=NA, 
+                          MODULE=NA, 
+                          DATE=NA,
+                          TIME=NA,
+                          LU1=NA,
+                          LU2=NA,
+                          PU=NA,
+                          T1=NA,
+                          T2=NA,
+                          LOOKUP_LC=NA,
+                          LOOKUP_C=NA,
+                          LOOKUP_ZONE=NA,
+                          NODATA=NA,
+                          OUTPUT_FOLDER=NA, row.names=NULL)
+}
+
 data2<-as.data.frame(as.character(ls(pattern="pu_pu")))
-if (nrow(data2)==0) {
-  pu_pu1<-ref
-  pu_pu1[pu_pu1==0]<-NA
+n_pu<-nrow(data2)
+if (n_pu==0) {
+  msgBox <- tkmessageBox(title = "QUES-C",
+                         message = "No planning unit found. Do you want to use administrative boundary as planning unit?",
+                         icon = "question", 
+                         type = "yesno", default="yes")
+  if(as.character(msgBox)=="no"){
+    quit()
+  }
+  ref[ref==0]<-NA
   lut.pu<-p.admin.df[2]
   lut.pu[2]<-p.admin.df[1]
-}
-data2<-as.data.frame(as.character(ls(pattern="pu_pu")))
-
-n<-nrow(data2)
-command3<-NULL
-for(i in 1:n) {
-  if (i!=n){
-    command3a<-eval(parse(text=(paste( "names(pu_pu", i, ")", sep=""))))
-    command3<-c(command3,command3a)
-  } else {
-    command3a<-eval(parse(text=(paste( "names(pu_pu", i, ")", sep=""))))
-    command3<-c(command3,command3a)
+  pu<-"ref"
+} else {
+  command3<-NULL
+  for(i in 1:n_pu) {
+    if (i!=n_pu){
+      command3a<-eval(parse(text=(paste( "names(pu_pu", i, ")", sep=""))))
+      command3<-c(command3,command3a)
+    } else {
+      command3a<-eval(parse(text=(paste( "names(pu_pu", i, ")", sep=""))))
+      command3<-c(command3,command3a)
+    }
   }
 }
 
@@ -99,13 +133,25 @@ data$data<-as.character(data$data)
 data3<-data
 a<-nrow(data3)
 repeat{
-  data<-edit(data)
-  if(sum(data$t1)==1 & sum(data$t2)==1){
-    break
+  data_temp<-edit(data)
+  if(sum(data_temp$t1)==1 & sum(data_temp$t2)==1){
+    data_temp$sum<-data_temp$t1+data_temp$t2
+    data_temp <- data_temp[which(data_temp$sum==1),]
+    n_temp<-nrow(data_temp)
+    if(n_temp!=0) {
+      data<-data_temp
+      break  
+    }
+  } else {
+    msgBox <- tkmessageBox(title = "Pre-QUES",
+                           message = "Choose data to be analyzed. Retry?",
+                           icon = "question", 
+                           type = "retrycancel", default="retry")
+    if(as.character(msgBox)=="cancel"){
+      quit()
+    }
   }
 }
-data$sum<-data$t1+data$t2
-data <- data[which(data$sum==1),]
 
 data$t1<-NULL
 data$t2<-NULL
@@ -117,22 +163,41 @@ T1<-data[1,2]
 T2<-data[2,2]
 
 #====SELECT PLANNING UNIT TO BE ANALYZED====
-data2<-as.data.frame(cbind(data2,command3))
-data2$usage<-0
-colnames(data2)[1]<-"data"
-colnames(data2)[2]<-"sources"
-data2$data<-as.character(data2$data)
-
-repeat{
-  data2<-edit(data2)
-  if(sum(data2$usage)==1){
-    break
+if(n_pu!=0){
+  data2<-as.data.frame(cbind(data2,command3))
+  data2$usage<-0
+  colnames(data2)[1]<-"data"
+  colnames(data2)[2]<-"sources"
+  data2$data<-as.character(data2$data)
+  data2$sources<-as.character(data2$sources)
+  data2<-rbind(data2, c("ref", "Administrative", 0))
+  data2$usage<-as.integer(data2$usage)  
+  repeat{
+    data2<-edit(data2)
+    if(sum(data2$usage)==1){
+      break
+    } else {
+      msgBox <- tkmessageBox(title = "Pre-QUES",
+                             message = "Choose one data as a planning unit. Retry?",
+                             icon = "question", 
+                             type = "retrycancel", default="retry")
+      if(as.character(msgBox)=="cancel"){
+        quit()
+      }
+    }
+  } 
+  data2 <- data2[which(data2$usage==1),]
+  data2$usage<-NULL
+  pu<-as.character(data2[1,1])
+  if(pu=="ref"){
+    ref[ref==0]<-NA
+    lut.pu<-p.admin.df[2]
+    lut.pu[2]<-p.admin.df[1]
+  } else {
+    pu_selected<-substr(pu, 6, 7)
+    eval(parse(text=(paste("lut.pu<-lut.pu", pu_selected, sep=""))))
   }
 }
-
-data2 <- data2[which(data2$usage==1),]
-data2$usage<-NULL
-pu<-as.character(data2[1,1])
 
 #====PROJECTION HANDLING====
 for(j in 1:n) {
@@ -160,45 +225,39 @@ if (grepl("+units=m", as.character(ref@crs))){
 
 time_start<-paste(eval(parse(text=(paste("Sys.time ()")))), sep="")
 
-#====Set Working Directory====
-QUESC.index<-QUESC.index+1
-dirQUESC<-paste(dirname(proj.file), "/QUES/QUES-C/QUESC_analysis_",data[1,2],"_",data[2,2], "_", QUESC.index, sep="")
-dir.create(dirQUESC, mode="0777")
-setwd(dirQUESC)
-
 #====Load Datasets====
 eval(parse(text=(paste("landuse1<-", data[1,1], sep=""))))
 eval(parse(text=(paste("landuse2<-", data[2,1], sep=""))))
 eval(parse(text=(paste("zone<-", data2[1,1],sep=""))))
 
 #====Check Peat Data====
-check_peat<-as.data.frame(as.character(ls(pattern="peat.index")))
-if(nrow(check_peat)!=0){
-  peat_map<-Peat_1*100
-  zone_peat_map<-zone+peat_map 
-  
-  legend_zone_peat<-as.data.frame(freq(zone_peat_map))
-  colnames(legend_zone_peat)[1]="ID"
-  legend_zone_peat<-merge(lut.pu, legend_zone_peat, by="ID", all=T)
-  colnames(legend_zone_peat)[2]="Z_NAME"
-  legend_zone_peat$count<-NULL
-  legend_zone_peat<-legend_zone_peat[which(legend_zone_peat$ID != "NA"),]
-  n_legend_zone_peat<-nrow(legend_zone_peat)
-  
-  #fill Z_NAME for peat
-  legend_zone_peat$Z_NAME<-as.character(legend_zone_peat$Z_NAME)
-  for(i in 1:(n_legend_zone_peat)){
-    if(legend_zone_peat[i,1] > 100){
-      id<-legend_zone_peat[i,1]-100
-      temp<-lut.pu[which(lut.pu$ID == id),]
-      legend_zone_peat[i,2]<-paste(as.character(temp[1,2]), ".gambut", sep="")
-    }
-  }
-  
-  lut.pu<-legend_zone_peat
-  zone<-zone_peat_map
-  lut.pu_peat<-legend_zone_peat
-} 
+# check_peat<-as.data.frame(as.character(ls(pattern="peat.index")))
+# if(nrow(check_peat)!=0){
+#   peat_map<-Peat_1*100
+#   zone_peat_map<-zone+peat_map 
+#   
+#   legend_zone_peat<-as.data.frame(freq(zone_peat_map))
+#   colnames(legend_zone_peat)[1]="ID"
+#   legend_zone_peat<-merge(lut.pu, legend_zone_peat, by="ID", all=T)
+#   colnames(legend_zone_peat)[2]="Z_NAME"
+#   legend_zone_peat$count<-NULL
+#   legend_zone_peat<-legend_zone_peat[which(legend_zone_peat$ID != "NA"),]
+#   n_legend_zone_peat<-nrow(legend_zone_peat)
+#   
+#   #fill Z_NAME for peat
+#   legend_zone_peat$Z_NAME<-as.character(legend_zone_peat$Z_NAME)
+#   for(i in 1:(n_legend_zone_peat)){
+#     if(legend_zone_peat[i,1] > 100){
+#       id<-legend_zone_peat[i,1]-100
+#       temp<-lut.pu[which(lut.pu$ID == id),]
+#       legend_zone_peat[i,2]<-paste(as.character(temp[1,2]), ".gambut", sep="")
+#     }
+#   }
+#   
+#   lut.pu<-legend_zone_peat
+#   zone<-zone_peat_map
+#   lut.pu_peat<-legend_zone_peat
+# } 
 
 #====Load Lookup Tables====
 lookup_c<- read.table(Look_up_table, header=TRUE, sep=",",)
@@ -206,6 +265,7 @@ lookup_z <- lut.pu
 lookup_c<-lookup_c[which(lookup_c[1] != raster.nodata),]
 lookup_lc<-lookup_c
 colnames(lookup_lc)<-c("ID","LC","CARBON")
+colnames(lookup_z)<-c("ID", "Z_NAME")
 
 #====Set Project Properties====
 title=location
@@ -230,29 +290,67 @@ chk_em<-carbon1>carbon2
 chk_sq<-carbon1<carbon2
 emission<-((carbon1-carbon2)*3.67)*chk_em
 sequestration<-((carbon2-carbon1)*3.67)*chk_sq
-rasterStack<-brick(landuse1,landuse2, zone)
-cross<-as.data.frame(crosstab(rasterStack))
+
+#===CHECK EXISTING RASTER BRICK OR CROSSTAB====
+setwd(paste(dirname(proj.file),"/QUES/", sep=""))
+command1<-paste(command1,pu, sep="")
+eval(parse(text=(paste("pu_name<-names(",pu[1],")", sep=''))))
+check_lucdb<-FALSE
+eval(parse(text=(paste("check_crosstab<-file.exists('lu.db_", pu_name ,"_", T1, "_", T2, ".dbf')", sep="")))) 
+eval(parse(text=(paste("check_rbrick<-file.exists('r.brick_", pu_name ,"_", T1, "_", T2, ".grd')", sep=""))))  
+if(check_crosstab){
+  eval(parse(text=(paste("data_merge<-read.dbf('lu.db_", pu_name ,"_", T1, "_", T2, ".dbf')", sep="")))) 
+} else if(check_rbrick){
+  eval(parse(text=(paste("r.brick<-brick('r.brick_", pu_name ,"_", T1, "_", T2, ".grd')", sep=""))))
+  lu.db<-crosstab(r.brick,long=TRUE,useNA=FALSE,progress='-')
+  check_lucdb<-TRUE
+} else {
+  eval(parse(text=(paste("r.brick<-brick(", command1, ", filename='r.brick_",pu_name,"_",T1, "_", T2, "')", sep=""))))
+  lu.db<-crosstab(r.brick,long=TRUE,useNA=FALSE,progress='-')
+  check_lucdb<-TRUE
+}
+
+#rasterStack<-brick(landuse1,landuse2, zone)
+#cross<-as.data.frame(crosstab(rasterStack))
 #eval(parse(text=(paste("r.brick_", as.character(T1),"_", as.character(T2), "<-rasterStack*1", sep=""))))
 
-colnames(cross)[1] ="ID_LC1"
-colnames(cross)[2] = "ID_LC2"
-colnames(cross)[3] = "ZONE"
-colnames(cross)[4] = "COUNT"
-colnames(lookup_c)[1]="ID_LC1"
-colnames(lookup_c)[2]="LC_t1"
-colnames(lookup_c)[3]="CARBON_t1"
-data_merge <- merge(cross,lookup_c,by="ID_LC1")
+if(check_lucdb) {
+  colnames(lu.db)[1] ="ID_LC1"
+  colnames(lu.db)[2] = "ID_LC2"
+  colnames(lu.db)[3] = "ZONE"
+  colnames(lu.db)[4] = "COUNT"
+  colnames(lookup_c)[1]="ID_LC1"
+  colnames(lookup_c)[2]="LC_t1"
+  colnames(lookup_c)[3]="CARBON_t1"
+  data_merge <- merge(lu.db,lookup_c,by="ID_LC1")
+  
+  colnames(lookup_c)[1]="ID_LC2"
+  colnames(lookup_c)[2]="LC_t2"
+  colnames(lookup_c)[3]="CARBON_t2"
+  data_merge <- as.data.frame(merge(data_merge,lookup_c,by="ID_LC2"))
+  
+  colnames(lookup_z)[1]="ZONE"
+  colnames(lookup_z)[2]="Z_NAME"
+  data_merge <- as.data.frame(merge(data_merge,lookup_z,by="ZONE"))
+  
+  original_data<-subset(data_merge, select=-c(CARBON_t1, CARBON_t2))
+  eval(parse(text=(paste("write.dbf(original_data, 'lu.db_", pu_name ,"_", T1, "_", T2, ".dbf')", sep="")))) 
+  rm(lu.db, original_data)
+} else {
+  carbon_table <- subset(lookup_lc, select=-LC)
+  colnames(carbon_table)[1]="ID_LC1"
+  colnames(carbon_table)[2]="CARBON_t1"
+  data_merge <- merge(data_merge,carbon_table,by="ID_LC1") 
+  colnames(carbon_table)[1]="ID_LC2"
+  colnames(carbon_table)[2]="CARBON_t2"
+  data_merge <- merge(data_merge,carbon_table,by="ID_LC2") 
+}
 
-colnames(lookup_c)[1]="ID_LC2"
-colnames(lookup_c)[2]="LC_t2"
-colnames(lookup_c)[3]="CARBON_t2"
-data_merge <- as.data.frame(merge(data_merge,lookup_c,by="ID_LC2"))
-
-colnames(lookup_z)[1]="ZONE"
-colnames(lookup_z)[2]="Z_NAME"
-data_merge <- as.data.frame(merge(data_merge,lookup_z,by="ZONE"))
-
-rm(cross)
+#====Set Working Directory====
+QUESC.index<-QUESC.index+1
+dirQUESC<-paste(dirname(proj.file), "/QUES/QUES-C/QUESC_analysis_",pu_name,"_",data[1,2],"_",data[2,2], "_", QUESC.index, sep="")
+dir.create(dirQUESC, mode="0777")
+setwd(dirQUESC) 
 
 #===Modify Carbon Stock Density for Each Time Series====
 data_merge$CARBON_t1<-data_merge$CARBON_t1
@@ -268,12 +366,15 @@ data_merge$null<-0
 data_merge$nullCek<-data_merge$em+data_merge$sq
 
 #===Generate area_zone Lookup and Calculate Min Area
-area_zone<-(freq(zone, useNA="no"))
+area_zone<-melt(data = data_merge, id.vars=c('ZONE'), measure.vars=c('COUNT'))
+area_zone<-dcast(data = area_zone, formula = ZONE ~ ., fun.aggregate = sum)
 colnames(area_zone)[1]<-"ID"
 colnames(area_zone)[2]<-"COUNT"
+area_zone$ID<-as.numeric(as.character(area_zone$ID))
+area_zone<-area_zone[with(area_zone, order(ID)),]
 colnames(lookup_z)[1]<-"ID"
 area_zone<-merge(area_zone, lookup_z, by="ID")
-area<-min(sum(area_zone$COUNT*Spat_res), sum(data_merge$COUNT))
+area<-min(sum(area_zone$COUNT), sum(data_merge$COUNT))
 
 #====Generate administrative unit====
 writeRaster(ref, filename="ref.tif", format="GTiff", overwrite=TRUE)
@@ -332,13 +433,14 @@ lg<-length(unique(data_merge$ZONE))
 zone_lookup<-area_zone
 data_zone<-area_zone
 data_zone$Z_CODE<-toupper(abbreviate(data_zone$Z_NAME))
+data_zone$Rate_seq<-data_zone$Rate_em<-data_zone$Avg_C_t2<-data_zone$Avg_C_t1<-0
 for(a in 1:lg){
   i<-unique(data_merge$ZONE)[a]
   data_z<-data_merge[which(data_merge$ZONE == i),]
-  data_zone$Avg_C_t1[which(data_zone$ID == i)]<-sum(data_z$CARBON_t1*data_z$COUNT)/sum(data_z$COUNT)
-  data_zone$Avg_C_t2[which(data_zone$ID == i)]<-sum(data_z$CARBON_t2*data_z$COUNT)/sum(data_z$COUNT)
-  data_zone$Rate_em[which(data_zone$ID == i)]<-sum(data_z$em)/(sum(data_z$COUNT)*period)
-  data_zone$Rate_seq[which(data_zone$ID == i)]<-sum(data_z$sq)/(sum(data_z$COUNT)*period)
+  data_zone<-within(data_zone, {Avg_C_t1<-ifelse(data_zone$ID == i, sum(data_z$CARBON_t1*data_z$COUNT)/sum(data_z$COUNT),Avg_C_t1)}) 
+  data_zone<-within(data_zone, {Avg_C_t2<-ifelse(data_zone$ID == i, sum(data_z$CARBON_t2*data_z$COUNT)/sum(data_z$COUNT),Avg_C_t2)}) 
+  data_zone<-within(data_zone, {Rate_em<-ifelse(data_zone$ID == i, sum(data_z$em)/(sum(data_z$COUNT)*period),Rate_em)}) 
+  data_zone<-within(data_zone, {Rate_seq<-ifelse(data_zone$ID == i, sum(data_z$sq)/(sum(data_z$COUNT)*period),Rate_seq)}) 
 }
 data_zone[,5:8]<-round(data_zone[,5:8],digits=3)
 
@@ -360,6 +462,7 @@ tb_em_total_10<-head(tb_em_total,n=10)
 #====Zonal Emission====
 tb_em_zonal<-as.data.frame(NULL)
 for (i in 1:length(zone_lookup$ID)){
+  tryCatch({
   a<-(zone_lookup$ID)[i]
   tb_em<-as.data.frame(cbind(order_em$ZONE, order_em$LU_CHG, as.data.frame(round(order_em$em, digits=3))))
   colnames(tb_em)<-c("ZONE","LU_CHG", "em")
@@ -371,6 +474,7 @@ for (i in 1:length(zone_lookup$ID)){
   tb_em_z$Percentage<-as.numeric(format(round((tb_em_z$em / sum(tb_em_z$em) * 100),2), nsmall=2))
   tb_em_z_10<-head(tb_em_z,n=10)
   tb_em_zonal<-rbind(tb_em_zonal,tb_em_z_10)
+  },error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 rm(tb_em, tb_em_total, tb_em_z, tb_em_z_10)
 
@@ -619,13 +723,9 @@ write.dbf(data_merge, "QUES-C_database.dbf")
 write.dbf(data_zone, "Carbon_Summary.dbf")
 write.dbf(em.matrix.total,"Total_Emission_Matrix.dbf ")
 write.dbf(seq.matrix.total, "Total_Sequestration_Matrix.dbf")
-#eval(parse(text=(paste("data_merge_", QUESC.index, "<-data_merge", sep=""))))
 
-eval(parse(text=(paste("QUESC_database_", data[1,2], "_", data[2,2], " <- data_merge", sep=""))))
-QUESC.index = QUESC.index + 1
-#if(nrow(check_peat)!=0){
-#}
-eval(parse(text=(paste("resave(QUESC_database_", data[1,2], "_", data[2,2], ", QUESC.index,lut.c, file=proj.file)", sep=""))))
+eval(parse(text=(paste("QUESC_database_", pu_name, "_", data[1,2], "_", data[2,2], " <- data_merge", sep=""))))
+eval(parse(text=(paste("resave(QUESC_database_", pu_name, "_", data[1,2], "_", data[2,2], ", QUESC.index,lut.c, file=proj.file)", sep=""))))
 
 for (i in 1:length(zone_lookup$ID)){
   em_matrix_z<-em.matrix.zonal[which(em.matrix.zonal$ZONE == i),]
@@ -656,10 +756,10 @@ myColors  <-c(myColors8,myColors5,myColors1, myColors2, myColors3, myColors4, my
 #====Landuse 1 map====
 myColors.lu <- myColors[1:length(unique(lookup_lc$ID))]
 lookup_lc$Colors<-myColors.lu
-lu1<-data_merge[,3]
-lu1<-as.data.frame(unique(lu1))
+lu1<-as.data.frame(unique(data_merge$ID_LC1))
 colnames(lu1)<-"ID"
 lu1<-merge(lu1,lookup_lc, by="ID")
+lu1$ID<-as.numeric(as.character(lu1$ID))
 lu1<-lu1[order(lu1$ID),]
 ColScale.lu1<-scale_fill_manual(name="Tipe tutupan lahan t1", breaks=lu1$ID, labels=lu1$LC, values=lu1$Colors)
 plot.LU1<-gplot(landuse1, maxpixels=100000) + geom_raster(aes(fill=as.factor(value))) +
@@ -673,10 +773,10 @@ plot.LU1<-gplot(landuse1, maxpixels=100000) + geom_raster(aes(fill=as.factor(val
          legend.key.width = unit(0.25, "cm"))
 
 #====Landuse 2 map====
-lu2<-data_merge[,2]
-lu2<-as.data.frame(unique(lu2))
+lu2<-as.data.frame(unique(data_merge$ID_LC2))
 colnames(lu2)<-"ID"
 lu2<-merge(lu2,lookup_lc, by="ID")
+lu2$ID<-as.numeric(as.character(lu2$ID))
 lu2<-lu2[order(lu2$ID),]
 ColScale.lu2<-scale_fill_manual(name="Tipe tutupan lahan t2", breaks=lu2$ID, labels=lu2$LC, values=lu2$Colors)
 plot.LU2<-gplot(landuse2, maxpixels=100000) + geom_raster(aes(fill=as.factor(value))) +
@@ -853,8 +953,6 @@ largestSeq<-ggplot(data=tb_seq_total_10, aes(x=reorder(LU_CODE, -seq), y=(seq)))
   theme(axis.title.x=element_blank(), axis.text.x = element_text(size=8),
         panel.grid.major=element_blank(), panel.grid.minor=element_blank())
 
-setwd(dirQUESC)
-
 printArea <- function(x){
   format(x, digits=15, big.mark=",")
 }
@@ -878,7 +976,7 @@ tabel_ket[6,1]<-"Negara"
 title1<-"{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red146\\green208\\blue80;\\red0\\green176\\blue240;\\red140\\green175\\blue71;\\red0\\green112\\blue192;\\red79\\green98\\blue40;} \\pard\\qr\\b\\fs70\\cf2 L\\cf3U\\cf4M\\cf5E\\cf6N\\cf7S \\cf1HASIL ANALISIS \\par\\b0\\fs20\\ql\\cf1"
 title2<-paste("\\pard\\qr\\b\\fs40\\cf1 Modul QUES-C - Analisis Dinamika Cadangan Karbon \\par\\b0\\fs20\\ql\\cf1", sep="")
 sub_title<-"\\cf2\\b\\fs32 ANALISIS DINAMIKA CADANGAN KARBON\\cf1\\b0\\fs20"
-rad_grk<-"\\pard\\qr\\b\\fs40\\cf1 Dokumen RAD GRK - Bab 2.3. Permasalahan Emisi GRK \\par\\b0\\fs20\\ql\\cf1"
+#rad_grk<-"\\pard\\qr\\b\\fs40\\cf1 Dokumen RAD GRK - Bab 2.3. Permasalahan Emisi GRK \\par\\b0\\fs20\\ql\\cf1"
 test<-as.character(Sys.Date())
 date<-paste("Date : ", test, sep="")
 time_start<-paste("Proses dimulai : ", time_start, sep="")
@@ -913,8 +1011,8 @@ addNewLine(rtffile)
 addNewLine(rtffile)
 addParagraph(rtffile, title1)
 addParagraph(rtffile, title2)
-addNewLine(rtffile)
-addParagraph(rtffile, rad_grk)
+#addNewLine(rtffile)
+#addParagraph(rtffile, rad_grk)
 addNewLine(rtffile)
 addParagraph(rtffile, line)
 addParagraph(rtffile, time_start)
@@ -1156,3 +1254,24 @@ done(rtffile)
 
 command<-paste("start ", "winword ", dirQUESC, "/LUMENS_QUES-C_report.lpr", sep="" )
 shell(command)
+
+#====write LUMENS log file====
+add.log<-data.frame(IDX=(QUESC.index), 
+                    MODULE="QUES-C", 
+                    DATE=format(Sys.time(), "%d-%m%-%Y"),
+                    TIME=format(Sys.time(), "%X"),
+                    LU1=data[1,1],
+                    LU2=data[2,1],
+                    PU=pu[1],
+                    T1=T1,
+                    T2=T2,
+                    LOOKUP_LC="From DB",
+                    LOOKUP_C=Look_up_table,
+                    LOOKUP_ZONE="From DB",
+                    NODATA=raster.nodata,
+                    OUTPUT_FOLDER=dirQUESC, row.names=NULL)
+log.quesc<-na.omit(rbind(log.quesc,add.log))
+write.csv(log.quesc, paste(user_path,"/LUMENS/LUMENS_quesc.log", sep=""))
+
+gc()
+

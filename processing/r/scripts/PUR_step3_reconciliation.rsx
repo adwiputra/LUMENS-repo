@@ -15,17 +15,18 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-  user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-  user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
 proj.file<-paste(log.file[1,1], "/", log.file[1,2],"/",log.file[1,2], ".lpj", sep="")
-load(proj.file)
+tempEnv<-new.env()
+load(proj.file, tempEnv)
 
 #Set PUR directory
-working_directory<-paste(log.file[1,1], "/", log.file[1,2],"/PUR", sep="")
+working_directory<-paste(log.file[1,1], "/", log.file[1,2],"/PUR/PUR_analysis_",tempEnv$PUR.index, sep="")
 setwd(working_directory)
 
 time_start<-paste(eval(parse(text=(paste("Sys.time ()")))), sep="")
@@ -204,8 +205,8 @@ if (test_unresolve!=0) {
 } else {
   database_unresolved_out<-as.data.frame("There are no unresolved area in this analysis session")
   colnames(database_unresolved_out)[1]<-"Reconciliation result"
-  PUR.index = PUR.index + 1
-  resave(PUR.index, file=proj.file)
+  #PUR.index = PUR.index + 1
+  #resave(PUR.index, file=proj.file)
 }
 
 #FUNCTION FOR PLOTTING
@@ -253,7 +254,7 @@ sub_title<-"\\b\\fs32 REKONSILIASI UNIT PERENCANAAN MENGGUNAKAN DATA ACUAN\\b0\\
 date<-paste("Date : ", date(), sep="")
 time_start<-paste("Processing started : ", time_start, sep="")
 time_end<-paste("Processing ended : ", eval(parse(text=(paste("Sys.time ()")))), sep="")
-area_name_rep<-paste("\\b", "\\fs20", location, "\\b0","\\fs20")
+area_name_rep<-paste("\\b", "\\fs20", tempEnv$location, "\\b0","\\fs20")
 line<-paste("------------------------------------------------------------------------------------------------------------------------------------------------")
 rtffile <- RTF("LUMENS_PUR_report_reconcile.lpr", font.size=9)
 addParagraph(rtffile, title)

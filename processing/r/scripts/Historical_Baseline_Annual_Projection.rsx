@@ -17,9 +17,9 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-  user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-  user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
@@ -32,15 +32,14 @@ substrRight <- function(x, n){
 }
 
 # SELECTING AVAILABLE QUES-C ANALYSIS
-
 QUESC_list<-as.data.frame(ls(pattern="QUESC_database"))
 colnames (QUESC_list) [1]<-"Data"
 QUESC_list$Usage<-0
 
 QUESC_list_n<-nrow(QUESC_list)
-if(QUESC_list_n<3){
+if(QUESC_list_n<2){
   msgBox <- tkmessageBox(title = "QUES",
-                         message = "Minimum three QUES-C Analysis Result required",
+                         message = "Minimum two QUES-C Analysis Result required",
                          icon = "info",
                          type = "ok")
   quit()
@@ -50,9 +49,16 @@ repeat{
   QUESC_list<-edit(QUESC_list)
   if(sum(QUESC_list$Usage)>2){
     break
+  } else {
+    msgBox <- tkmessageBox(title = "Annual projection",
+                           message = "Choose at least three QUES-C database. Retry?",
+                           icon = "question", 
+                           type = "retrycancel", default="retry")
+    if(as.character(msgBox)=="cancel"){
+      quit()
+    }
   }
 }
-
 
 QUESC_list <- QUESC_list[which(QUESC_list$Usage==1),]
 QUESC_list$Usage<-NULL
@@ -60,17 +66,37 @@ QUESC_list_n<-nrow(QUESC_list)
 dbase_all<-NULL
 
 data<-as.character(QUESC_list [QUESC_list_n,1])
-t1<-as.integer(substr(data, 16:19, 19))
-t2<-as.integer(substr(data, 21:24, 24))
-eval(parse(text=(paste("central_data<-QUESC_database_", t1,"_", t2, sep=""))))
-central_data$key<- do.call(paste, c(central_data[c("LU_CHG", "Z_NAME")], sep = " in "))
+n_dta<-nchar(data)
+t1<-as.integer(substr(data, (n_dta-8):(n_dta-5), (n_dta-5)))
+t2<-as.integer(substr(data, (n_dta-3):n_dta, n_dta))
+pu_name<-substr(data, 16:(n_dta-10), (n_dta-10))
+pu_list<-as.data.frame(ls(pattern="pu_pu"))
+colnames(pu_list)[1]<-"PU"
+pu_list$PU<-as.character(pu_list$PU)
+pu_list$Name<-"name"
+pu_list$LUT<-"LUT"
+for(i in 1:nrow(pu_list)){
+  eval(parse(text=(paste("pu_list[",i,",2]<-names(",pu_list$PU[i],")", sep=""))))
+  eval(parse(text=(paste("pu_list[",i,",3]<-'lut.pu",i,"'",sep=""))))
+}
+pu_list<-rbind(pu_list, c("ref", names(ref), "p.admin.df"))
+pu_selected<-pu_list[which(pu_list$Name==pu_name),]
+eval(parse(text=(paste("lut.pu<-", pu_selected$LUT ,sep=""))))
 
+dirAnnual<-paste(dirname(proj.file), "/SCIENDO/Annual_", pu_name, sep="")
+dir.create(dirAnnual, mode="0777")
+setwd(dirAnnual)
+workingDirectory<-dirAnnual
+
+eval(parse(text=(paste("central_data<-", data, sep=""))))
+central_data$key<- do.call(paste, c(central_data[c("LU_CHG", "Z_NAME")], sep = " in "))
 
 for(i in 1:QUESC_list_n) {
   data<-as.character(QUESC_list [i,1])
-  t1<-as.integer(substr(data, 16:19, 19))
-  t2<-as.integer(substr(data, 21:24, 24))
-  eval(parse(text=(paste("dbase<-QUESC_database_", t1,"_", t2, sep=""))))
+  n_dta<-nchar(data)
+  t1<-as.integer(substr(data, (n_dta-8):(n_dta-5), (n_dta-5)))
+  t2<-as.integer(substr(data, (n_dta-3):n_dta, n_dta))
+  eval(parse(text=(paste("dbase<-", data, sep=""))))
   dbase$Start_year<-t1
   dbase$End_year<-t2
   dbase$nYear<-dbase$End_year-dbase$Start_year
@@ -79,8 +105,8 @@ for(i in 1:QUESC_list_n) {
   data2$ID_LC1<-as.character(data2$ID_LC1)
   data2$ID_LC2<-as.character(data2$ID_LC2)
   
-  data2.1<-subset(data2, ID_LC1==ID_LC2, select = ZONE:nYear)
-  data2.2<-subset(data2, ID_LC1!=ID_LC2, select = ZONE:nYear)
+  data2.1<-subset(data2, ID_LC1==ID_LC2)
+  data2.2<-subset(data2, ID_LC1!=ID_LC2)
   
   data2.1$ID_LC1<-as.factor(data2.1$ID_LC1)
   data2.1$ID_LC2<-as.factor(data2.1$ID_LC2) 
@@ -118,7 +144,6 @@ for(i in 1:QUESC_list_n) {
   data2ann<-merge(data2ann,lu.count.zone.t2, by.x=c("LC_t1", "Z_NAME"), by.y=c("LC_t2", "Z_NAME"), all=TRUE)
   data2ann<-replace(data2ann, is.na(data2ann), 0)
   eval(parse(text=(paste("data2ann$TPM", i, "<-data2ann$COUNT/data2ann$COUNT.LU.ZONE.t1", sep=""))))
-  #data2ann<-replace(data2ann, is.na(data2ann), 0)
   
   #HANDLING NEW EMERGING LAND USE TYPE IN TPM
   data2ann <- replace(data2ann, is.na(data2ann), 0)
@@ -133,21 +158,23 @@ for(i in 1:QUESC_list_n) {
   data2.cek$CEK<-NULL
   data3<-merge(data2ann,data2.cek, by=c("ID_LC1", "ZONE"), all=TRUE)
   data3<-replace(data3, is.na(data3), 0)
-  data3.cek1<-subset(data3, ACT=="Fix")
-  data3.cek2<-subset(data3, ACT=="Ignore")
   
+  data3.cek1<-subset(data3, ACT=="Fix")
   data3.cek1$ID_LC1<-as.character(data3.cek1$ID_LC1)
   data3.cek1$ID_LC2<-as.character(data3.cek1$ID_LC2)
-  
-  data3.cek1a<-subset(data3.cek1, ID_LC1==ID_LC2)
-  data3.cek1b<-subset(data3.cek1, ID_LC1!=ID_LC2)
-    
+  data3.cek1a<-subset(data3.cek1, ID_LC1==ID_LC2) #check if null
+  data3.cek1b<-subset(data3.cek1, ID_LC1!=ID_LC2) #check if null
   data3.cek1a$ID_LC1<-as.factor(data3.cek1a$ID_LC1)
   data3.cek1a$ID_LC2<-as.factor(data3.cek1a$ID_LC2) 
   data3.cek1b$ID_LC1<-as.factor(data3.cek1b$ID_LC1)
   data3.cek1b$ID_LC2<-as.factor(data3.cek1b$ID_LC2)  
+  if(nrow(data3.cek1a)!=0){
+    eval(parse(text=(paste("data3.cek1a$TPM", i, "<-1", sep="")))) 
+  }
   
-  eval(parse(text=(paste("data3.cek1a$TPM", i, "<-1", sep=""))))
+  data3.cek2<-subset(data3, ACT=="Ignore")
+  data3.cek2<-data3.cek2[which(data3.cek2$LU_CHG!=0),]
+  
   data4<-rbind(data3.cek1a,data3.cek1b,data3.cek2)
   data4$key<- do.call(paste, c(data4[c("LU_CHG", "Z_NAME")], sep = " in "))
   eval(parse(text=(paste("data4<-subset(data4,select=c(key, TPM", i, "))", sep=""))))
@@ -178,7 +205,6 @@ data2<-merge(data2,lu.count.zone.t1, by=c("LC_t1", "Z_NAME"), all=TRUE)
 data2<-merge(data2,lu.count.zone.t2, by.x=c("LC_t1", "Z_NAME"), by.y=c("LC_t2", "Z_NAME"), all=TRUE)
 data2<-replace(data2, is.na(data2), 0)
 
-
 #CALCULATE PREDICTED AREA AT ITERATION 1
 data4<-data2
 data4$COUNT.it0<-data4$COUNT
@@ -195,7 +221,7 @@ for (w in 2:iteration) {
 }
 
 tryCatch({
-write.dbf(data4,"SCIENDO-LUWES_annual_database.dbf")
+  write.dbf(data4,"SCIENDO-LUWES_annual_database.dbf")
 },error=function(e){cat("dbf file can't be written", "\n")})
 
 annual_emission<-NULL
@@ -219,7 +245,7 @@ em$netem<-em$annual_emission-em$annual_sequestration
 em$cum_netem<-cumsum(em$netem)
 
 year<-as.character(QUESC_list [QUESC_list_n,1])
-t0<-as.integer(substr(data, 21:24, 24))
+t0<-t2
 yearsim<-c(t0:(t0+iteration))
 
 em<-as.data.frame(cbind(yearsim,em))
@@ -229,54 +255,33 @@ plot2<-ggplot(em,aes(yearsim,annual_emission,group=1))+ geom_line(colour="red")+
 plot3<-ggplot(em,aes(yearsim,annual_sequestration,group=1))+ geom_line(colour="red")+geom_point(colour="red", size=4, shape=21, fill="white")
 plot4<-ggplot(em,aes(yearsim,cum_netem,group=1))+ geom_line(colour="red")+geom_point(colour="red", size=4, shape=21, fill="white")
 
-dirAnnual<-paste(dirname(proj.file), "/SCIENDO/annual", sep="")
-dir.create(dirAnnual, mode="0777")
-setwd(dirAnnual)
-workingDirectory<-dirAnnual
+#====CREATE .CAR FILE FOR NEW ABACUS====
+# pu <- melt(data = data2, id.vars=c('ZONE','Z_NAME'), measure.vars=c('COUNT'))
+# pu <- dcast(data = pu, formula = Z_NAME + ZONE ~ variable, fun.aggregate = sum )
+# pu_zname <- lut.pu
+# colnames(pu_zname)[1] <- "ZONE"
+# colnames(pu_zname)[2] <- "Z_NAME"
+# pu<-pu[which(pu$Z_NAME != 0),]
+# pu <- merge(pu, pu_zname, by="Z_NAME")
+# pu<-na.omit(pu)
+# pu$Penunjukkan<-pu$ZONE.y<-pu$COUNT<-NULL
+# rownames(pu)<-NULL
+# colnames(pu)[2]="ZONE"
 
-#====WRITE CAR====
-# t1=period1
-# t2=period2
-# period<-abs(t2-t1)
-# data_merge<-read.dbf(carbonData)
-# data_merge2<-read.dbf(paste(workingDirectory,"SCIENDO-LUWES_database.dbf", sep="/"))
+pu <- lut.pu
+colnames(pu)[1] <- "ZONE"
+colnames(pu)[2] <- "Z_NAME"
 
-pu <- melt(data = data4, id.vars=c('ZONE','Z_NAME'), measure.vars=c('COUNT'))
-pu <- dcast(data = pu, formula = Z_NAME + ZONE ~ variable, fun.aggregate = sum )
-check_peat<-as.data.frame(as.character(ls(pattern="peat.index")))
-if(nrow(check_peat)!=0){
-  lut.pu<-lut.pu_peat
-}
-pu_zname <- lut.pu
-colnames(pu_zname)[1] <- "ZONE"
-colnames(pu_zname)[2] <- "Z_NAME"
-pu<-pu[which(pu$Z_NAME != 0),]
-pu <- merge(pu, pu_zname, by="Z_NAME")
-pu<-na.omit(pu)
-pu$Penunjukkan<-NULL
-pu$percentage<-(pu$COUNT/sum(pu$COUNT))
-pu$ZONE.y<-NULL
-rownames(pu)<-NULL
-colnames(pu)[2]="ZONE"
-#colnames(pu)[3] <- "ZONE"
-test<-as.character(pu$Z_NAME)
-
-zone_merge <- subset(pu,select=c(Z_NAME, COUNT))
-colnames(zone_merge)[2] <- "Z_AREA"
-data4 <- merge(data4, zone_merge, by="Z_NAME", all=TRUE)
-data4$LUTMZone <- data4$COUNT.it0 / data4$Z_AREA
-data4<-na.omit(data4)
-
-d1<-melt(data=data4, id.vars=c('ID_LC1','LC_t1'))
+d1<-melt(data=data2, id.vars=c('ID_LC1','LC_t1'))
 d1$variable<-d1$value<-NULL
 d1<-unique(d1)
 d1<-na.omit(d1)
-d2<-melt(data=data4, id.vars=c('ID_LC2','LC_t2'))
+d2<-melt(data=data2, id.vars=c('ID_LC2','LC_t2'))
 d2$variable<-d2$value<-NULL
 d2<-unique(d2)
 d2<-na.omit(d2)
-lu1.lost<-unique(data4$ID_LC2)[is.na(match(unique(data4$ID_LC2),unique(data4$ID_LC1)))]
-lu2.lost<-unique(data4$ID_LC1)[is.na(match(unique(data4$ID_LC1),unique(data4$ID_LC2)))]
+lu1.lost<-unique(data2$ID_LC2)[is.na(match(unique(data2$ID_LC2),unique(data2$ID_LC1)))]
+lu2.lost<-unique(data2$ID_LC1)[is.na(match(unique(data2$ID_LC1),unique(data2$ID_LC2)))]
 lu.lost<-c(as.integer(as.matrix(lu1.lost)),as.integer(as.matrix(lu2.lost)))
 while(length(lu1.lost)!=0 || length(lu2.lost)!=0){
   if(length(lu1.lost)!=0){
@@ -296,310 +301,141 @@ while(length(lu1.lost)!=0 || length(lu2.lost)!=0){
 colnames(d2)<-c("ID","CLASS")
 
 name.matrix<-d2
-name.matrix$LC_CODE<-toupper(abbreviate(name.matrix$CLASS, minlength=4, method="both"))
 name.matrix$order<-name.matrix$ID
 name.matrix$order<-as.numeric(levels(name.matrix$order))[name.matrix$order]
 name.matrix<- as.data.frame(name.matrix[order(name.matrix$order, decreasing=FALSE),])
 name.matrix$order<-NULL
 
-#Creating SCIENDO-Emission Baseline Database
-col.select<-as.character(c('em_t0','sq_t0'))
-for(i in 1:iteration){
-  EM.slc<-paste('em_t',i,sep="")
-  col.select<-c(col.select,EM.slc)
-  SQ.slc<-paste('sq_t',i,sep="")
-  col.select<-c(col.select,SQ.slc)
-}
-Baseline.db.1<-data4[,1:15]
-Baseline.db.2<-data4[c(col.select)]
-Baseline.db<-as.data.frame(cbind(Baseline.db.1,Baseline.db.2))
-rm(Baseline.db.1)
-rm(Baseline.db.2)
-
 options(scipen=999)
 Scenario_name<-gsub(" ","","Annual projection")
 
 #CREATING ABACUS PROJECT FILE
-Gnrl.info.1<-c("file_version", "title","description", "numberofzones","total_area","time", "include_bg","include_modif", "using_bg_factor","using_modif_factor", "model_iteration")
-Gnrl.info.2<-c("1.1.0", "SCIENDO", "Project description",length(unique(pu$ZONE)),sum(data4$COUNT), 1, "false", "false", "true", "true", iteration)
+#General and Project information
+Gnrl.info.1<-c("file_version")
+Gnrl.info.2<-c("1.2.0")
 Gnrl.info<-paste(Gnrl.info.1,Gnrl.info.2,sep="=")
-
-#General Information
-fileConn<-file(paste(workingDirectory,"/",Scenario_name,".txt",sep=""))
+#fileConn<-file(paste(result_dir,"/",Scenario_name,".txt",sep=""))
 text0<-"#GENERAL"
-write(text0, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-write.table(Gnrl.info, paste(workingDirectory,"/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=FALSE,row.names=FALSE, sep="\t")
-text<-"\n#ZONE"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+write(text0, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+write.table(Gnrl.info, paste(dirAnnual,"/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE,col.names=FALSE,row.names=FALSE,sep="\t")
+
+Project.info.1<-c("title","description", "baseyear0", "baseyear1", "n_iteration")
+Project.info.2<-c("SCIENDO", "Project description", t2-1, t2, iteration)
+Project.info<-paste(Project.info.1,Project.info.2,sep="=")
+text<-"\n#PROJECT"
+write(text, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+write.table(Project.info, paste(dirAnnual,"/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE,col.names=FALSE,row.names=FALSE,sep="\t")
+
+#Landcover information
+text<-"\n#LANDCOVER"
+write(text, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+name.matrix$lc_id<-0:(nrow(name.matrix)-1)
+name.lc<-as.data.frame(name.matrix$lc_id)
+name.lc$label<-name.matrix$CLASS
+name.lc$description<-''
+colnames(name.lc)[1]='//lc_id'
+name.lc.temp<-name.lc
+write.table(name.lc, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE,col.names=TRUE,row.names=FALSE,sep="\t")
 
 #Zone information
-zone<-pu[c('Z_NAME','percentage')]
-log.val<-rep('true',length(pu$ZONE))
-zone<-cbind(zone, log.val)
-write.table(zone, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=FALSE,row.names=FALSE, sep="\t")
+text<-"\n#ZONE"
+write(text, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+pu$order<-pu$ZONE
+#pu$order<-as.numeric(levels(pu$order))[pu$order]
+pu<-as.data.frame(pu[order(pu$order, decreasing=FALSE),])
+pu$zone_id<-0:(nrow(pu)-1)
+name.pu<-as.data.frame(pu$zone_id)
+name.pu$label<-pu$Z_NAME
+name.pu$description<-''
+colnames(name.pu)[1]='//zone_id'
+name.pu.temp<-name.pu
+colnames(name.pu.temp)[2]='Z_NAME'
+write.table(name.pu, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE,col.names=TRUE,row.names=FALSE,sep="\t")
 
-#Landuse Information
-text<-"\n#LANDCOVER"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-write.table(name.matrix$CLASS, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=FALSE,row.names=FALSE, sep="\t")
-
-#Eligibility
-egb<-matrix('true',ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-egb<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),egb))
-colnames(egb)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-text<-"\n#ELIGIBILITY"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-write.table(egb, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-
-#Cost Benefit Unit
-text<-"\n#COSTBENEFIT_UNIT"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-text<-"Private\tNet return received by the land-use operator, farmers"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+#Landcover change
+text<-"\n#LANDCOVER_CHANGE"
+write(text, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+eval(parse(text=(paste("name.lcc<-",data))))
+name.lcc$iteration_id<-name.lcc$'//scenario_id'<-0
+name.lcc<-merge(name.lcc, name.pu.temp, by="Z_NAME")
+colnames(name.lc.temp)[2]='LC_t1'
+name.lcc<-merge(name.lcc, name.lc.temp, by="LC_t1")
+name.lcc$lc1_id<-name.lcc$'//lc_id'
+name.lcc$'//lc_id'<-NULL
+colnames(name.lc.temp)[2]='LC_t2'
+name.lcc<-merge(name.lcc, name.lc.temp, by="LC_t2")
+name.lcc$lc2_id<-name.lcc$'//lc_id'
+name.lcc<-name.lcc[c('//scenario_id','iteration_id','//zone_id','lc1_id','lc2_id','COUNT')]
+colnames(name.lcc)[3]='zone_id'
+colnames(name.lcc)[4]='lc1_id'
+colnames(name.lcc)[5]='lc2_id'
+colnames(name.lcc)[6]='area'
+name.lcc<-name.lcc[which(name.lcc$area != 0),]
+write.table(name.lcc, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE,col.names=TRUE,row.names=FALSE,sep="\t")
 
 #Carbon Stock
 text<-"\n#CARBONSTOCK"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-#carbon<-matrix(ncol=nrow(name.matrix),nrow=nrow(name.matrix),0)
-data_merge.melt <- melt(data = data4, id.vars=c('LC_t1','Z_NAME'), measure.vars=c('CARBON_t1'))
-data_merge.melt2 <- melt(data = data4, id.vars=c('LC_t2','Z_NAME'), measure.vars=c('CARBON_t2'))
-data_merge.melt <- na.omit(data_merge.melt)
-data_merge.melt2 <- na.omit(data_merge.melt2)
-carbon1 <- dcast(data = data_merge.melt, formula = LC_t1 ~ Z_NAME, fun.aggregate = mean)
-carbon2 <- dcast(data = data_merge.melt2, formula = LC_t2 ~ Z_NAME, fun.aggregate = mean)
-c1.lost<-unique(carbon2$LC_t2)[is.na(match(unique(carbon2$LC_t2),unique(carbon1$LC_t1)))]
-c2.lost<-unique(carbon1$LC_t1)[is.na(match(unique(carbon1$LC_t1),unique(carbon2$LC_t2)))]
-while(length(c1.lost)!=0 || length(c2.lost)!=0){
-  if(length(c1.lost)!=0){
-    new.lu<-carbon2[carbon2$LC_t2 %in% c1.lost, 1:ncol(carbon2)]
-    colnames(new.lu)[1]<-'LC_t1'
-    carbon1<-rbind(carbon1,new.lu)
-    c1.lost<-unique(carbon2$LC_t2)[is.na(match(unique(carbon2$LC_t2),unique(carbon1$LC_t1)))]
-  } else if(length(c2.lost)!=0){
-    new.lu<-carbon1[carbon1$LC_t1 %in% c2.lost, 1:ncol(carbon1)]
-    colnames(new.lu)[1]<-'LC_t2'
-    carbon2<-rbind(carbon2,new.lu)
-    c2.lost<-unique(carbon1$LC_t1)[is.na(match(unique(carbon1$LC_t1),unique(carbon2$LC_t2)))]
+write(text, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
+colnames(name.lc.temp)[2]<-"LC"
+colnames(lut.c)[2]<-"LC"
+colnames(lut.c)[3]<-"CARBON"
+name.carbon.temp<-merge(name.lc.temp, lut.c, by="LC")
+name.carbon.temp<-name.carbon.temp[c('//lc_id','CARBON')]
+name.carbon<-data.frame()
+for(i in 0:(nrow(name.pu)-1)){
+  for(j in 1:nrow(name.lc)){
+    name.carbon<-rbind(name.carbon, c(0, 0, i, name.carbon.temp$'//lc_id'[j], name.carbon.temp$CARBON[j]))
   }
 }
-#for(i in 1:nrow(name.matrix)){
-#for(j in 1:nrow(name.matrix)){
-#carbon[i,j]<-round(unique(data_merge$CARBON_t1[which(data_merge$ID_LC1==i & data_merge$ID_LC2==j)]),digits=2)
-#}
-#}
-#carbon<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),carbon))
-#carbon[,2:23][carbon[,2:23]==0]<-format(carbon[,2:23][carbon[,2:23]==0], nsmall=1, digits=2)
-#colnames(carbon)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-cek_carbon <- sum(carbon1[2]) != 0
-k=3
-while(cek_carbon){
-  if(cek_carbon){
-    k <- carbon1[2]
-    break
-  } else {
-    cek_carbon <- sum(carbon1[k]) != 0
-    k=k+1
-  }
-} 
-for(i in 2:ncol(carbon1)){
-    carbon1[i] <- k
-}
-write.table(carbon1, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
+colnames(name.carbon)=c('//scenario_id','iteration_id','zone_id','lc_id','area')
+write.table(name.carbon, paste(dirAnnual, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
 
-#NPV Private
-NPV<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-NPV<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),NPV))
-#NPV[,2:23]<-format(NPV[,2:23],nsmall=1,digits=2)
-colnames(NPV)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-text<-"\n#NPV_Private"
-write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-write.table(NPV, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
+#Cost Benefit Unit (if exist)
+#text<-"\n#COSTBENEFIT_UNIT\nlabel=Private\ndescription=Net return received by the land-use operator, farmers\n*TABLE"
+#write(text, paste(result_dir, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
 
-#COST Benefit CONVERSION Private
-for (i in 1:nrow(zone)){
-  CBCV<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-  CBCV<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),CBCV))
-  #CBCV[,2:23]<-format(CBCV[,2:23], nsmall=1,digits=2)
-  colnames(CBCV)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#COSTBENEFIT_CONVERSION_Private\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(NPV, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#LANDCOVER CHANGE
-write("", paste(workingDirectory,"/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-LC_chg<-melt(data4, id.vars=c('ZONE','Z_NAME','ID_LC1','ID_LC2'), measure.vars=c('LUTMZone'))
-LC_chg$order1<-LC_chg$ID_LC1
-LC_chg$order1<-as.numeric(levels(LC_chg$order1))[LC_chg$order1]
-LC_chg$order2<-LC_chg$ID_LC2
-LC_chg$order2<-as.numeric(levels(LC_chg$order2))[LC_chg$order2]
-LC_chg<-within(LC_chg, {value<-ifelse(is.na(value),0, value)})
-for(i in 1:nrow(zone)){
-  LC_chg_Z<-LC_chg[which(LC_chg$Z_NAME==zone$Z_NAME[i]),]
-  if(sum(LC_chg_Z$value)==0){
-    m<-NPV
-  } else {
-    LC_chg_Z_M<-dcast(LC_chg_Z, order1~order2, fun.aggregate=mean, value.var='value')
-    colnames(LC_chg_Z_M)[1]<-'ID'
-    LC_chg_Z_M<-merge(LC_chg_Z_M,name.matrix,by="ID", all=TRUE)
-    LC_chg_Z_M$ID<-as.numeric(LC_chg_Z_M$ID)
-    LC_chg_Z_M<- as.data.frame(LC_chg_Z_M[order(LC_chg_Z_M$ID, decreasing=FALSE),])
-    LC_chg_Z_M$LC_CODE<-NULL
-    row.names(LC_chg_Z_M)<-NULL
-    LC_chg_Z_M_ID<-LC_chg_Z_M$ID
-    LC_chg_Z_M$ID<-NULL
-    #LC_chg_Z_M<-LC_chg_Z_M[,c(ncol(LC_chg_Z_M),1:(ncol(LC_chg_Z_M)-1))]
-    a<-lu.lost[!(lu.lost %in% names(LC_chg_Z_M))]
-    eval(parse(text=(paste("LC_chg_Z_M$'",a,"'<-0", sep=""))))
-    LC_chg_Z_M[is.na(LC_chg_Z_M)]<-0
-    m<-data.frame(LC_chg_Z_M$CLASS)
-    for(j in 1:length(LC_chg_Z_M_ID)){
-      eval(parse(text=(paste("m<-cbind(m,LC_chg_Z_M[","'",LC_chg_Z_M_ID[j],"'","])",sep=""))))
-    }
-  }
-  #LC_chg_Z_M<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),LC_chg_Z_M))
-  #LC_chg_Z_M[,2:23][LC_chg_Z_M[,2:23]==0]<-format(LC_chg_Z_M[,2:23][LC_chg_Z_M[,2:23]==0], nsmall=1, digits=2)
-  colnames(m)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#LANDCOVER_CHANGE\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(m, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#BelowGround Emission
-write("", paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-for (i in 1:nrow(zone)){
-  BGE<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-  BGE<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),BGE))
-  #BGE[,2:23]<-format(BGE[,2:23],nsmall=1,digits=2)
-  colnames(BGE)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#BELOWGROUND_EMISSION\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(BGE, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#BelowGround Emission Factor
-write("", paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-for (i in 1:nrow(zone)){
-  BGEF<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-  BGEF<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),BGEF))
-  #BGEF[,2:23]<-format(BGEF[,2:23],nsmall=1,digits=2)
-  colnames(BGEF)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#BELOWGROUND_E_FACTOR\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(BGEF, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#Modif Emission
-write("", paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-for (i in 1:nrow(zone)){
-  ME<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-  ME<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),ME))
-  #ME[,2:23]<-format(ME[,2:23],nsmall=1,digits=2)
-  colnames(ME)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#MODIF_EMISSION\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(ME, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#Modif Emission Factor
-write("", paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-for (i in 1:nrow(zone)){
-  MEF<-matrix(0,ncol=nrow(name.matrix), nrow=nrow(name.matrix))
-  MEF<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),MEF))
-  #MEF[,2:23]<-format(MEF[,2:23],nsmall=1,digits=2)
-  colnames(MEF)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-  text<-paste("\n#MODIF_E_FACTOR\tZONE=",zone$Z_NAME[i], sep="")
-  write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-  write.table(MEF, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t")
-}
-
-#Transition Probability Matrix 
-write("", paste(workingDirectory,"/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-TPM<-melt(data4, id.vars=c('ZONE','Z_NAME','ID_LC1','ID_LC2'), measure.vars=c('TPM1'))
-TPM$order1<-TPM$ID_LC1
-TPM$order1<-as.numeric(levels(TPM$order1))[TPM$order1]
-TPM$order2<-TPM$ID_LC2
-TPM$order2<-as.numeric(levels(TPM$order2))[TPM$order2]
-for(j in 0:iteration) {
-  for(i in 1:nrow(zone)){
-    TPM_Z<-TPM[which(TPM$Z_NAME==zone$Z_NAME[i]),]
-    if(sum(TPM_Z$value)==0){
-      m<-as.data.frame(diag(1, nrow(name.matrix), nrow(name.matrix)))
-      m<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),m))
-    } else {
-      TPM_Z_M<-dcast(TPM_Z, order1~order2, fun.aggregate=mean, value.var='value')
-      colnames(TPM_Z_M)[1]<-'ID'
-      TPM_Z_M<-merge(TPM_Z_M,name.matrix,by="ID", all=TRUE)
-      TPM_Z_M$ID<-as.numeric(TPM_Z_M$ID)
-      TPM_Z_M<- as.data.frame(TPM_Z_M[order(TPM_Z_M$ID, decreasing=FALSE),])
-      TPM_Z_M$LC_CODE<-NULL
-      row.names(TPM_Z_M)<-NULL
-      TPM_Z_M_ID<-TPM_Z_M$ID
-      TPM_Z_M$ID<-NULL
-      #TPM_Z_M<-TPM_Z_M[,c(ncol(TPM_Z_M),1:(ncol(TPM_Z_M)-1))]
-      a<-lu.lost[!(lu.lost %in% names(TPM_Z_M))]
-      eval(parse(text=(paste("TPM_Z_M$'",a,"'<-0", sep=""))))
-      TPM_Z_M[is.na(TPM_Z_M)]<-0
-      m<-data.frame(TPM_Z_M$CLASS)
-      for(k in 1:length(TPM_Z_M_ID)){
-        eval(parse(text=(paste("m<-cbind(m,TPM_Z_M[","'",TPM_Z_M_ID[k],"'","])",sep=""))))
-      }
-    }
-    
-    #TPM_Z_M<-as.data.frame(cbind(as.data.frame(name.matrix$CLASS),TPM_Z_M))
-    #TPM_Z_M[,2:23][TPM_Z_M[,2:23]==0]<-format(TPM_Z_M[,2:23][TPM_Z_M[,2:23]==0], nsmall=1, digits=2)
-    colnames(m)<-(c('//LandCover', as.character(name.matrix$CLASS)))
-    text<-paste("\n#TRANSITION_PROBABILITY_MATRIX\tITERATION=", j, "\tZONE=",zone$Z_NAME[i], sep="")
-    write(text, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-    write.table(m, paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE,quote=FALSE, col.names=TRUE,row.names=FALSE, sep="\t") 
-  }
-}
-write("\n", paste(workingDirectory, "/",Scenario_name,".car",sep=""),append=TRUE, sep="\t")
-
-Abacus_Project_File = paste(workingDirectory, "/",Scenario_name,".car",sep="") #work with car file and also supported text file with abacus project format
+Abacus_Project_File = paste(dirAnnual, "/",Scenario_name,".car",sep="") #work with car file and also supported text file with abacus project format
 #Original_Project_File = paste(workingDirectory, "/","Original_data.car",sep="")
 #file.copy(Abacus_Project_File,Original_Project_File)
 
-if (file.exists("C:/Program Files (x86)/LUMENS/AbacusScenario")){
-  abacusExecutable = "C:/Progra~2/LUMENS/AbacusScenario/abacus "
-} else{
-  abacusExecutable = "C:/Progra~1/LUMENS/AbacusScenario/abacus "
-}
-systemCommand <- paste(abacusExecutable, Abacus_Project_File)
 
+if (file.exists("C:/Program Files (x86)/LUMENS/Abacus2")){
+  abacusExecutable = "C:/Progra~2/LUMENS/Abacus2/abacus2 "
+} else{
+  abacusExecutable = "C:/Progra~1/LUMENS/Abacus2/abacus2 "
+}
+systemCommand <- paste(abacusExecutable, Abacus_Project_File, "-ref LUMENS -wd", dirAnnual)
 system(systemCommand)
 
-
 #====WRITE REPORT====
-title<-"\\b\\fs32 LUMENS-SCIENDO - HISTORICAL BASELINE ANNUAL PROJECTION \\b0\\fs20"
-date<-paste("Date : ", as.character(Sys.Date()), sep="")
-time_start<-paste("Processing started : ", time_start, sep="")
-time_end<-paste("Processing ended : ", eval(parse(text=(paste("Sys.time ()")))), sep="")
-line<-paste("------------------------------------------------------------------------------------------------------------------------------------------------")
-I_O_period_1_rep<-paste("\\b","\\fs20", period1)
-I_O_period_2_rep<-paste("\\b","\\fs20", period2)
-rtffile <- RTF("LUMENS_SCIENDO-Annual_Projection_report.lpr", font.size=9)
-addParagraph(rtffile, "\\b\\fs32 Hasil Analisis\\b0\\fs20")
-addNewLine(rtffile)
-addNewLine(rtffile)
-addParagraph(rtffile, title)
-addNewLine(rtffile)
-addNewLine(rtffile)
-addParagraph(rtffile, line)
-addParagraph(rtffile, date)
-addParagraph(rtffile, time_start)
-addParagraph(rtffile, time_end)
-addParagraph(rtffile, line)
-addNewLine(rtffile)
-addTable(rtffile,em, font.size=8) 
-addNewLine(rtffile)
-addPlot(rtffile,plot.fun=print, width=6.7,height=3,res=300, plot1)
-addNewLine(rtffile)
-addPlot(rtffile,plot.fun=print, width=6.7,height=3,res=300, plot2)
-done(rtffile)
-
-command<-paste("start ", "winword ", dirAnnual, "/LUMENS_SCIENDO-Annual_Projection_report.lpr", sep="" )
-shell(command)
-
+# title<-"\\b\\fs32 LUMENS-SCIENDO - HISTORICAL BASELINE ANNUAL PROJECTION \\b0\\fs20"
+# date<-paste("Date : ", as.character(Sys.Date()), sep="")
+# time_start<-paste("Processing started : ", time_start, sep="")
+# time_end<-paste("Processing ended : ", eval(parse(text=(paste("Sys.time ()")))), sep="")
+# line<-paste("------------------------------------------------------------------------------------------------------------------------------------------------")
+# I_O_period_1_rep<-paste("\\b","\\fs20", period1)
+# I_O_period_2_rep<-paste("\\b","\\fs20", period2)
+# rtffile <- RTF("LUMENS_SCIENDO-Annual_Projection_report.lpr", font.size=9)
+# addParagraph(rtffile, "\\b\\fs32 Hasil Analisis\\b0\\fs20")
+# addNewLine(rtffile)
+# addNewLine(rtffile)
+# addParagraph(rtffile, title)
+# addNewLine(rtffile)
+# addNewLine(rtffile)
+# addParagraph(rtffile, line)
+# addParagraph(rtffile, date)
+# addParagraph(rtffile, time_start)
+# addParagraph(rtffile, time_end)
+# addParagraph(rtffile, line)
+# addNewLine(rtffile)
+# addTable(rtffile,em, font.size=8) 
+# addNewLine(rtffile)
+# addPlot(rtffile,plot.fun=print, width=6.7,height=3,res=300, plot1)
+# addNewLine(rtffile)
+# addPlot(rtffile,plot.fun=print, width=6.7,height=3,res=300, plot2)
+# done(rtffile)
+# 
+# command<-paste("start ", "winword ", dirAnnual, "/LUMENS_SCIENDO-Annual_Projection_report.lpr", sep="" )
+# shell(command)
 
 

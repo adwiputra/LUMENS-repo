@@ -8,13 +8,19 @@ LUMENS_log <- as.data.frame(Sys.info())
 OS <- substr(as.character(LUMENS_log[2,1]), 1, 2)
 username <- as.character(LUMENS_log[6,1])
 if(OS == "XP") {
-user_path<-paste("C:/Documents and Settings/", username, sep="")
+  user_path<-paste("C:/Documents and Settings/All Users", sep="")
 } else {
-user_path<-paste("C:/Users/", username, sep="")
+  user_path<-paste("C:/Users/Public", sep="")
 }
 LUMENS_path_user <- paste(user_path,"/LUMENS/LUMENS.log", sep="")
 log.file<-read.table(LUMENS_path_user, header=FALSE, sep=",")
-wd_user<-paste(log.file[1,1], "/", log.file[1,2],"/PUR", sep="")
+proj.file<-paste(log.file[1,1], "/", log.file[1,2],"/",log.file[1,2], ".lpj", sep="")
+tempEnv<-new.env()
+load(proj.file, tempEnv)
+PUR.index=tempEnv$PUR.index+1
+tempEnv$resave(PUR.index, file=proj.file)
+wd_user<-paste(log.file[1,1], "/", log.file[1,2],"/PUR/PUR_analysis_",PUR.index, sep="")
+rm(tempEnv)
 
 #wd_ref<-dirname(as.character(ref_data))
 #setwd(wd_ref)
@@ -23,6 +29,7 @@ wd_user<-paste(log.file[1,1], "/", log.file[1,2],"/PUR", sep="")
 sa<-ref_data
 sa<-subset(sa, select=Field)
 
+dir.create(wd_user, mode="0777")
 setwd(wd_user)
 acuan_kelas<-c("Conservation", "Production", "Other")
 acuan_kode<-c(10,20,30)
